@@ -1,4 +1,4 @@
-import type { History, Location, Path, To } from "./history";
+import type { Action, History, Location, Path, To } from "./history";
 import {
   Action as HistoryAction,
   createLocation,
@@ -8,6 +8,9 @@ import {
 } from "./history";
 import type {
   ActionFunction,
+  ActionFunctionArgs,
+  ActionFunctionArgsWithMiddleware,
+  ActionFunctionWithMiddleware,
   AgnosticDataRouteMatch,
   AgnosticDataRouteObject,
   AgnosticRouteMatch,
@@ -18,6 +21,9 @@ import type {
   FormEncType,
   FormMethod,
   LoaderFunction,
+  LoaderFunctionArgs,
+  LoaderFunctionArgsWithMiddleware,
+  LoaderFunctionWithMiddleware,
   MiddlewareContext,
   MiddlewareContextInstance,
   MutationFormMethod,
@@ -3085,7 +3091,11 @@ async function callRoutePipeline(
   request: Request,
   matches: AgnosticDataRouteMatch[],
   requestContext: unknown,
-  handler: LoaderFunction | ActionFunction
+  handler:
+    | LoaderFunction
+    | ActionFunction
+    | LoaderFunctionWithMiddleware
+    | ActionFunctionWithMiddleware
 ) {
   // Avoid memory leaks since we don't control the key
   let store = new WeakMap();
@@ -3123,7 +3133,11 @@ async function callRouteSubPipeline(
   params: Params<string>,
   requestContext: unknown,
   middlewareContext: MiddlewareContext,
-  handler: LoaderFunction | ActionFunction
+  handler:
+    | LoaderFunction
+    | ActionFunction
+    | LoaderFunctionWithMiddleware
+    | ActionFunctionWithMiddleware
 ): Promise<ReturnType<LoaderFunction>> {
   if (request.signal.aborted) {
     throw new Error("Request aborted");
@@ -3140,8 +3154,8 @@ async function callRouteSubPipeline(
     return handler({
       request,
       params,
-      context: requestContext,
-      middleware: middlewareContext,
+      context: middlewareContext,
+      requestContext,
     });
   }
 
@@ -3168,7 +3182,8 @@ async function callRouteSubPipeline(
   let res = await matches[0].route.middleware({
     request,
     params,
-    middleware: middlewareContext,
+    context: middlewareContext,
+    requestContext,
   });
 
   if (nextCalled) {
@@ -3217,22 +3232,20 @@ async function callLoaderOrAction(
 
     // Only call the pipeline for the matches up to this specific match
     let idx = matches.findIndex((m) => m.route.id === match.route.id);
-    result = await Promise.race([
-      enableMiddleware
-        ? callRoutePipeline(
-            request,
-            matches.slice(0, idx + 1),
-            requestContext,
-            handler
-          )
-        : handler({
-            request,
-            params: match.params,
-            context: requestContext,
-            middleware: disabledMiddlewareContext,
-          }),
-      abortPromise,
-    ]);
+    let dataPromise = enableMiddleware
+      ? callRoutePipeline(
+          request,
+          matches.slice(0, idx + 1),
+          requestContext,
+          handler
+        )
+      : (handler as LoaderFunction | ActionFunction)({
+          request,
+          params: match.params,
+          context: requestContext || disabledMiddlewareContext,
+        });
+
+    result = await Promise.race([dataPromise, abortPromise]);
 
     invariant(
       result !== undefined,
