@@ -3271,6 +3271,7 @@ async function callLoaderOrAction(
         "Redirects returned/thrown from loaders/actions must have a Location header"
       );
 
+      // From https://stackoverflow.com/a/31991870
       let isAbsolute = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(location);
 
       // Support relative routing in internal redirects
