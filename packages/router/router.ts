@@ -3194,10 +3194,13 @@ async function callRouteSubPipeline(
 }
 
 function disabledMiddlewareFn() {
-  throw new Error("Middleware not enabled (`future.unstable_middleware`)");
+  throw new Error(
+    "Middleware must be enabled via the `future.unstable_middleware` flag)"
+  );
 }
 
 const disabledMiddlewareContext: MiddlewareContext = {
+  // @ts-expect-error
   get: disabledMiddlewareFn,
   set: disabledMiddlewareFn,
   next: disabledMiddlewareFn,
